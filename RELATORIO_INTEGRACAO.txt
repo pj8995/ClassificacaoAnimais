@@ -1,0 +1,40 @@
+RELATÓRIO DE INTEGRAÇÃO — ANIMALIA
+
+Treinamento canino parado a pedido do usuário: 21 épocas completas; época 22 interrompida.
+best.pt preserva o melhor modelo pela perda de validação; last.pt permite retomar a época 22.
+Nenhuma nova época de treinamento de raça foi executada durante a integração.
+
+MODELOS ATIVOS E RESULTADOS
+cachorro: outputs\do_zero_ampliado\cachorro\best.pt
+Acurácia: 48.37%; F1 macro: 47.07%; amostras: 8546.
+SHA-256 do relatório conferido com o checkpoint ativo.
+gato: outputs\do_zero_ampliado\gato\best.pt
+Acurácia: 64.84%; F1 macro: 65.10%; amostras: 1183.
+SHA-256 do relatório conferido com o checkpoint ativo.
+
+RECURSOS E AJUSTES
+Classificação de raça usa os melhores modelos próprios ampliados de cães e gatos.
+Detector COCO e filtro ImageNet continuam pré-treinados.
+Reconhecimento da Paula e fases retirados da API e da interface por solicitação do usuário.
+Fotos, scripts históricos, backups e checkpoints antigos foram preservados.
+Tentativa de retreino da Paula com a nova base foi descartada por regressão.
+Relatório dessa tentativa: outputs/paula/tentativa_nova_base_metrics.json.
+Novo utilitário avaliar_checkpoint.py avalia checkpoints sem treinar novas épocas.
+
+VALIDAÇÃO
+45 testes executados: sem falhas; 3 testes de integração históricos da Paula ignorados.
+Log: outputs/testes_integracao.log.
+Sintaxe Python e JavaScript conferida.
+Página inicial e /api/estado verificados via cliente de teste Flask.
+Relatórios de cães e gatos correspondem aos pesos ativos por SHA-256.
+
+EXECUÇÃO
+.\.venv\Scripts\python.exe app.py
+Abrir http://127.0.0.1:5000. Reiniciar qualquer servidor aberto antes da alteração.
+
+LIMITAÇÕES PARA A APRESENTAÇÃO
+Os testes de software não comprovam precisão em novas fotos.
+O teste das bases já foi consultado em experimentos anteriores e não é independente final.
+Os números avaliam os classificadores antes dos filtros do fluxo completo.
+Scores não são probabilidades calibradas ou comprovação de ancestralidade.
+A demonstração visual final no navegador deve usar fotos escolhidas para apresentação.

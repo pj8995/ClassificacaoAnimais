@@ -1,0 +1,267 @@
+ROTEIRO DE APRESENTAÇÃO — PROJETO ANIMALIA
+Guia baseado no código revisado. Os caminhos abaixo são relativos à pasta do projeto.
+As linhas são referências da versão revisada e podem mudar após edições.
+
+1. OBJETIVO E VISÃO GERAL
+O sistema recebe uma fotografia, identifica se há cão ou gato e consulta um
+classificador de raças da espécie. O reconhecimento individual da Paula e suas fases foram retirados do produto.
+São 120 classes caninas e 12 felinas. A identificação é estatística e pode errar.
+
+Fala sugerida:
+“Dividimos o projeto em interface, API, preparação dos dados, treinamento e
+inferência. A imagem sai do navegador, é validada no servidor e passa pelos
+modelos. O resultado volta para a tela, junto às métricas disponíveis.”
+
+2. INTERFACE: ONDE O USUÁRIO ENVIA A FOTO
+Arquivos: templates/index.html, static/styles.css e static/app.js.
+- HTML: estrutura da página, seleção da foto, configurações, resultado e histórico.
+- CSS: aparência, disposição dos painéis e adaptação para telas menores.
+- JavaScript: interações, prévia local, envio à API e apresentação da resposta.
+Pontos para abrir no JavaScript:
+- choose(), linha 16: valida formato/tamanho e prepara a prévia.
+- renderHistory(), linha 42: monta o histórico na tela.
+- renderPrediction(), linha 64: apresenta resultado, alternativas e métricas.
+- Evento do botão analyze, linha 117: inicia a solicitação de análise.
+- fetch(), próximo à linha 37: comunicação HTTP com o servidor.
+
+Tecnologias: HTML, CSS e JavaScript com fetch. A prévia é local no navegador.
+
+3. SERVIDOR E API
+Arquivo: app.py.
+- create_app(), linha 25: cria a aplicação Flask e suas configurações.
+- classify(), linha 48: carrega o classificador no primeiro uso e o reutiliza.
+- index(), linha 60: entrega a página inicial.
+- state(), linha 65: fornece disponibilidade dos modelos e histórico.
+- classify_upload(), linha 74: recebe a imagem e executa o fluxo de análise.
+- download_history(), linha 142: exporta o histórico em CSV.
+
+Rotas para explicar:
+GET /: página inicial.
+GET /api/estado: estado dos modelos e histórico.
+POST /api/classificar: recebe foto, limiar e opção de espécie.
+GET /download/historico: baixa os registros.
+
+O servidor verifica o conteúdo da imagem, aceita JPG/PNG/WEBP e limita uploads
+a 10 MB e 20 megapixels. Pillow corrige a orientação e converte a imagem.
+Locks de threading protegem o uso do modelo e o acesso ao histórico.
+As fotos recebidas na interface não são salvas; os resultados vão para
+ dados/historico.csv.
+
+4. COMO O SISTEMA DECIDE SE É CÃO OU GATO
+Arquivo: general_classifier.py.
+- AnimalClassifier, linha 86: reúne os modelos e encaminha a análise.
+- __init__(), linha 88: carrega o filtro geral e o detector disponível.
+- predict(), linha 106: organiza a identificação de espécie e a consulta à raça.
+- summarize(), linha 62: agrupa a classificação geral e aplica o filtro de escopo.
+
+São usados dois componentes auxiliares pré-treinados:
+A) EfficientNet-B0 com pesos ImageNet: classificação geral da imagem.
+B) Faster R-CNN ResNet50 FPN V2 com pesos COCO: localização de cães e gatos.
+O detector está em pet_detector.py, classe PetDetector, linha 20.
+select_pet(), linha 9, seleciona uma detecção com score suficiente, mínimo 0,50.
+Uma detecção confiável tem prioridade sobre a classificação geral.
+
+Se não houver reconhecimento suficiente, o sistema recusa a imagem.
+Se o usuário informar a espécie, o filtro automático é pulado; o retorno deixa
+registrado que essa informação veio do usuário.
+
+5. CLASSIFICAÇÃO DA RAÇA E TRATAMENTO DA INCERTEZA
+Arquivos: own_dog_classifier.py, own_cat_classifier.py e breed_quality.py.
+- OwnDogClassifier, linha 16: carrega e executa o modelo canino.
+- predict(), linha 28: analisa a foto original e sua versão espelhada.
+- OwnCatClassifier, em own_cat_classifier.py: reaproveita esse fluxo com o checkpoint felino.
+- breed_decision(), em breed_quality.py: decide se a raça pode ser confirmada.
+
+A confirmação exige score mínimo de 0,75 (ou o limiar maior escolhido na tela),
+margem mínima de 0,15 para a segunda opção e concordância entre as duas vistas.
+O fluxo geral ainda combina essa decisão com o score da espécie.
+Quando os critérios falham, a raça fica “não identificada” e as alternativas
+são hipóteses. Um score não é uma probabilidade calibrada nem prova ancestralidade.
+
+6. MODELO ANTERIOR: TRANSFERÊNCIA DE APRENDIZADO
+Arquivo: treinar_racas.py, função train(), linha 39.
+A arquitetura é EfficientNet-B0, uma rede neural convolucional do torchvision.
+O código cria a rede, carrega explicitamente pesos ImageNet locais e substitui
+a camada final pela quantidade de classes do nosso conjunto.
+As características são extraídas com a base congelada e guardadas em cache;
+apenas a cabeça classificadora aprende a separar as raças locais.
+
+Fala sugerida:
+“No primeiro experimento, aproveitamos características visuais já aprendidas
+no ImageNet. Nós treinamos uma nova camada final para as nossas raças.”
+
+Atenção: weights=None isoladamente não prova treino do zero. Neste script,
+os pesos pré-treinados são carregados logo depois por load_state_dict().
+
+7. MODELO DO ZERO: TODAS AS CAMADAS APRENDEM
+Arquivos: treinar_do_zero.py e animal_classifier.py.
+- build_model(), animal_classifier.py, linha 101: cria a EfficientNet-B0 e
+  adapta a saída ao número de classes.
+- train(), treinar_do_zero.py, linha 51: executa o treinamento por espécie.
+- Próximo à linha 83: build_model(..., pretrained=False) inicia pesos aleatórios.
+- Verificação de requires_grad: confirma que todas as camadas podem aprender.
+- Laço de épocas, após a linha 130: percorre lotes, calcula erro e atualiza pesos.
+
+Componentes para mostrar no laço:
+- DataLoader: entrega imagens e rótulos em lotes.
+- AdamW: otimizador que atualiza os parâmetros.
+- cross_entropy: função de perda para classificação de várias classes.
+- loss.backward(): calcula os gradientes através da rede inteira.
+- clip_grad_norm_(): limita a norma dos gradientes para auxiliar a estabilidade.
+- optimizer.step(): aplica a atualização dos pesos.
+- Agenda cosseno: reduz a taxa de aprendizado ao longo das épocas.
+- evaluate(): mede o desempenho sem atualizar pesos.
+
+O melhor checkpoint é escolhido pela menor perda de validação, não pela
+maior acurácia. A parada antecipada ocorre após o número configurado de
+épocas sem melhora dessa perda.
+
+8. PREPARAÇÃO E TRANSFORMAÇÃO DAS IMAGENS
+Arquivo: animal_classifier.py.
+- open_image(), linha 33: abre a foto, corrige EXIF e converte para RGB.
+- transform(), linha 20: prepara os tensores.
+- AnimalDataset, linha 84: liga os caminhos e rótulos ao carregador do PyTorch.
+
+No treino do zero: recorte aleatório para 224 x 224, espelhamento horizontal,
+variação de brilho/contraste/saturação, conversão para tensor e normalização.
+Essas variações ajudam a reduzir a memorização. Na avaliação, o processamento
+é fixo. Usar normalização compatível com ImageNet não significa carregar seus pesos.
+
+9. DE ONDE VÊM OS DADOS
+- preparar_dataset.py: organiza Stanford Dogs para as 120 classes caninas.
+  finalize(), linha 100: consolida divisões e relatórios, com deduplicação.
+- preparar_gatos.py, prepare(), linha 21: organiza as 12 raças felinas de
+  Oxford-IIIT Pets.
+- datasets/stanford_dogs.json e datasets/oxford_cats.json: manifestos originais.
+Um manifesto relaciona os caminhos das imagens, seus rótulos e suas divisões.
+Treino ensina; validação escolhe o checkpoint; teste mede o modelo selecionado.
+Os scripts preservam as divisões publicadas de teste e separam a validação.
+
+Dados adicionais:
+- baixar_dados_extras.py: baixa revisões fixas das fontes públicas documentadas.
+- preparar_dados_extras.py, prepare(), linha 131: acrescenta imagens ao treino.
+- HashIndex, linha 29, e image_info(), linha 60: auxiliam a análise de duplicatas.
+- SHA-256 detecta cópias exatas; pHash ajuda a filtrar imagens visualmente próximas.
+- datasets/ampliado/: manifestos, proveniência e documentos das fontes.
+As fontes adicionais incluem AtharvaTaras/Cat-Breeds-Dataset,
+CatInBeard/cat-breeds-dataset e giacomov/tsinghua_dogs.
+Validação e teste originais são preservados. A filtragem não garante eliminar
+todas as imagens parecidas ou todos os erros de rótulo.
+
+10. CONTINUAÇÃO COM DADOS ADICIONAIS
+Arquivo: treinar_do_zero.py, bloco init_root próximo à linha 89.
+Essa etapa começa com os melhores pesos que nós mesmos treinamos do zero.
+Ela continua ajustando todas as camadas com mais fotos; não reinicia do zero
+nem usa pesos ImageNet para os classificadores de raça.
+A referência inicial é avaliada na validação e permanece como candidata ao
+melhor modelo. É usado um novo otimizador para essa nova etapa.
+
+Configuração documentada: até 30 épocas adicionais, paciência 10,
+taxa inicial 0,0002, batch de 16 e quatro threads de CPU.
+Gatos e cães são treinados sequencialmente, gatos primeiro.
+
+11. ARQUIVOS SALVOS E RETOMADA
+Diretórios: outputs/do_zero/ e outputs/do_zero_ampliado/, separados por espécie.
+- best.pt: pesos escolhidos pela validação.
+- last.pt: última época completa, otimizador e estados dos sorteios para retomada.
+- history.json: perdas, acurácia de validação e duração das épocas.
+- status.json: estado atual, época e lote.
+- manifest.json: dados utilizados na execução.
+- test_metrics.json: avaliação após a seleção do modelo.
+- treinamento.log e erros.log: acompanhamento do processo.
+
+save_checkpoint(), linha 27, usa arquivo temporário antes de substituir o final.
+--resume retoma da última época completa; uma época interrompida é refeita.
+Não iniciar uma segunda execução enquanto a primeira estiver ativa.
+
+12. MÉTRICAS
+Arquivo: evaluation_metrics.py.
+- summarize_confusion(), linha 16: calcula métricas a partir da matriz de confusão.
+- response_metrics(), linha 52: prepara os indicadores usados pela API.
+- _load(), linha 43: confere a correspondência entre relatório e checkpoint.
+
+Acurácia: proporção total de classificações corretas.
+Precisão: entre as previsões de uma classe, quantas estavam corretas.
+Recall: entre os exemplos reais da classe, quantos foram encontrados.
+F1: combina precisão e recall.
+F2: combina os dois, atribuindo maior peso ao recall.
+As médias macro dão o mesmo peso a cada classe.
+SHA-256 vincula as métricas ao arquivo de pesos correspondente.
+
+As métricas do relatório descrevem o conjunto avaliado; não representam o
+acerto garantido de uma foto nem a acurácia de todo o fluxo da aplicação.
+Não comparar diretamente uma acurácia de validação com uma acurácia de teste
+como se fossem a mesma medição.
+
+13. EXPERIMENTO HISTÓRICO DA PAULA — RETIRADO
+A identificação individual e a distinção filhote/adulta foram retiradas do
+fluxo da aplicação por solicitação do usuário. Não são carregadas pelos
+classificadores nem exibidas na interface. Fotos, scripts e artefatos anteriores
+foram preservados para consulta histórica. Não demonstrar esse recurso como ativo.
+
+14. TECNOLOGIAS E ONDE FORAM USADAS
+Python: servidor, preparação de dados, treinamento e inferência.
+Flask: rotas HTTP e entrega da página, em app.py.
+PyTorch: redes, tensores, gradientes, otimizador e checkpoints.
+torchvision: EfficientNet-B0, Faster R-CNN e transformações de imagem.
+Pillow: leitura, validação, orientação e espelhamento de imagens.
+HTML/CSS/JavaScript: interface, estilo e interação no navegador.
+CSV: histórico e relatórios tabulares. JSON: manifestos, progresso e métricas.
+hashlib/SHA-256: identificação de duplicatas e vínculo entre pesos e relatórios.
+SciPy/NumPy: operações usadas no hash perceptual dos dados adicionais.
+PyArrow: leitura de dados Parquet das fontes adicionais.
+requests/huggingface_hub: downloads de bases e arquivos públicos.
+unittest: testes automatizados na pasta tests/.
+transformers/safetensors: dependências de componentes anteriores; não são
+as bibliotecas responsáveis pelo treino atual do zero da EfficientNet.
+
+15. TESTES E DEMONSTRAÇÃO
+A pasta tests/ contém testes de API, dados, métricas, decisões de aceitação,
+identidade, fases e treinamento. Exemplos: test_web.py, test_metrics.py,
+test_from_scratch.py e test_extra_data.py.
+Comando de testes: .\.venv\Scripts\python.exe -m unittest discover -s tests -v
+Validação da integração: 45 testes executados, sem falhas; 3 testes da integração
+histórica da Paula foram desativados após a retirada desse recurso.
+Testes de software não substituem avaliação de precisão em imagens novas.
+
+Sequência sugerida na apresentação:
+1) Mostrar a interface e enviar uma foto conhecida.
+2) Abrir static/app.js e app.py para explicar navegador -> API.
+3) Abrir AnimalClassifier.predict() para mostrar o encaminhamento por espécie.
+4) Mostrar breed_decision() para explicar a possibilidade de abstenção.
+5) Comparar treinar_racas.py com treinar_do_zero.py.
+6) Mostrar o laço com cross_entropy, backward e optimizer.step.
+7) Mostrar history.json, status.json e um relatório de métricas concluído.
+8) Encerrar com as limitações e próximos passos.
+
+16. VERSÃO INTEGRADA PARA A APRESENTAÇÃO
+A interface foi alterada para consultar os melhores checkpoints ampliados:
+- outputs/do_zero_ampliado/cachorro/best.pt, em own_dog_classifier.py.
+- outputs/do_zero_ampliado/gato/best.pt, em own_cat_classifier.py.
+Os relatórios de métricas são lidos dessas mesmas pastas, com conferência SHA-256.
+Os checkpoints anteriores continuam preservados nas pastas originais.
+A etapa canina foi interrompida voluntariamente após 21 épocas completas;
+a época 22 estava em andamento. O melhor checkpoint foi escolhido pela perda
+de validação e não corresponde necessariamente à última época salva.
+O treino de raças não precisa continuar para usar o melhor checkpoint existente.
+Avaliamos esse checkpoint com avaliar_checkpoint.py, sem novos passos de treino.
+A identificação da Paula e suas fases foram retiradas da aplicação.
+Consulte RELATORIO_INTEGRACAO.txt para os resultados efetivamente verificados.
+
+Fala sugerida:
+“Na versão integrada, os classificadores de raça usam os nossos pesos originados
+do zero, continuados com fotos adicionais. Mantivemos a EfficientNet-B0 como
+arquitetura. O detector COCO e o filtro geral ImageNet continuam pré-treinados.
+Interrompemos voluntariamente o treino canino e adotamos os melhores pesos
+escolhidos pela validação, com seus relatórios correspondentes.”
+
+Não afirmar que toda a aplicação foi treinada do zero, que o score é certeza,
+que a detecção comprova a raça ou que a avaliação local garante desempenho
+em qualquer foto. O teste original já foi consultado em decisões anteriores;
+uma confirmação independente exige novas fotos reservadas.
+
+17. RESULTADOS DA VERSÃO INTEGRADA
+Cães: 48,37% de acurácia e 47,07% de F1 macro, em 8.546 imagens de teste.
+Gatos: 64,84% de acurácia e 65,10% de F1 macro.
+Relatórios conferidos por SHA-256 com os pesos ativos.
+A identidade da Paula foi retirada. Consulte RELATORIO_INTEGRACAO.txt.

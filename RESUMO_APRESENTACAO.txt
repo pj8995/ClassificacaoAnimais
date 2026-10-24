@@ -1,0 +1,78 @@
+ANIMALIA — RESUMO PARA APRESENTAÇÃO
+
+1. OBJETIVO
+Receber uma foto, identificar cão ou gato e tentar reconhecer a raça.
+Fluxo: interface -> API -> identificação da espécie -> raça -> resultado.
+
+2. ARQUITETURA E INFRAESTRUTURA DO MODELO
+- Raças: rede neural convolucional EfficientNet-B0, com saída adaptada
+  para 120 classes caninas ou 12 felinas. Entrada de 224 x 224 pixels.
+- Os modelos de raça começaram com pesos aleatórios e continuaram o
+  treinamento com dados adicionais. Todas as camadas são treináveis.
+- Detecção: Faster R-CNN ResNet50 FPN V2, pré-treinada no COCO.
+- Filtro geral: EfficientNet-B0 pré-treinada no ImageNet.
+- PyTorch e torchvision executam as redes em GPU CUDA quando disponível
+  ou CPU. Os pesos ativos ficam em outputs/do_zero_ampliado/, separados
+  por espécie, no arquivo best.pt.
+- Aplicação local: navegador + servidor Flask, em 127.0.0.1:5000.
+  Dependências na .venv; histórico em dados/historico.csv.
+
+3. PRINCIPAIS PARTES DO CÓDIGO
+- templates/index.html e static/styles.css: estrutura e visual da tela.
+- static/app.js / choose() e renderPrediction(): seleção e prévia da foto,
+  envio por fetch e apresentação da resposta.
+- app.py / classify_upload(): recebe a foto em /api/classificar,
+  valida o arquivo, chama o classificador e registra o resultado.
+- general_classifier.py / AnimalClassifier.predict(): coordena a análise
+  e escolhe o classificador da espécie; pet_detector.py detecta o animal.
+- own_dog_classifier.py e own_cat_classifier.py: carregam os modelos
+  de raça e analisam a imagem original e espelhada.
+- breed_quality.py / breed_decision(): decide se pode confirmar a raça
+  pela confiança, margem entre opções e concordância das duas vistas.
+- animal_classifier.py / build_model() e transform(): monta a rede
+  e prepara as imagens.
+- treinar_do_zero.py / train(): cross_entropy calcula o erro,
+  backward() calcula gradientes e optimizer.step() atualiza os pesos
+  com AdamW. O melhor modelo tem a menor perda de validação.
+- evaluation_metrics.py: calcula as métricas e prepara sua exibição.
+
+4. MÉTRICAS UTILIZADAS
+- Acurácia: porcentagem total de previsões corretas.
+- Precisão: das previsões de uma raça, quantas estavam corretas.
+- Recall: das fotos reais de uma raça, quantas foram reconhecidas.
+- F1: combina precisão e recall; F2 dá maior peso ao recall.
+- Macro: média que dá o mesmo peso a cada classe.
+- Loss: erro usado no treinamento e na escolha do melhor modelo.
+
+Resultados registrados no relatório de integração:
+Cães: 48,37% de acurácia e 47,07% de F1 macro.
+Gatos: 64,84% de acurácia e 65,10% de F1 macro.
+São métricas dos classificadores no conjunto avaliado, antes dos filtros
+completos da aplicação. O score de uma foto não representa certeza.
+
+5. ORIGEM DOS DADOS
+- Cães: Stanford Dogs e giacomov/tsinghua_dogs (Hugging Face).
+- Gatos: Oxford-IIIT Pets, AtharvaTaras/Cat-Breeds-Dataset
+  e CatInBeard/cat-breeds-dataset (GitHub).
+
+6. TECNOLOGIAS
+Python e Flask: servidor/API. PyTorch e torchvision: modelos e treino.
+Pillow: imagens. HTML/CSS/JavaScript: interface. CSV/JSON: registros
+ e relatórios. unittest: testes automatizados.
+
+7. VERIFICAÇÃO DOS COMENTÁRIOS
+O código não está todo documentado por comentários ou docstrings.
+A revisão dos 23 arquivos Python da raiz, 12 arquivos de testes e dos
+arquivos da interface encontrou comentários nas principais partes da
+aplicação, mas funções sem descrição em:
+- avaliar_checkpoint.py: main().
+- baixar_dados_extras.py: download_zip().
+- own_cat_classifier.py: __init__().
+- preparar_dados_extras.py: funções de preparação, seleção de imagens
+  e métodos do índice de duplicatas.
+- treinar_do_zero.py: write_json(), save_checkpoint(), evaluate(),
+  train() e main() não têm descrição própria, embora existam comentários
+  dentro do arquivo.
+- tests/: diversas classes e funções de teste não têm descrição própria.
+Não é necessário comentar cada linha; o ideal é explicar o propósito
+ das funções e as decisões importantes. Esta revisão não alterou o código.
